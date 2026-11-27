@@ -149,13 +149,30 @@ The engineering stack is locked to prioritize **zero-SaaS ownership**, **low ope
 
 ## 6. MVP Milestones
 
-1. **Phase 1 — Core Photo-First MVP:** SwiftUI iOS + iPhone Duo adaptive shell, Sign in with Apple + Swift VPS API + Postgres 17 + R2, Photo AI Capture + Review & Adjust (portion multipliers + sauces/oils drawer), Today's Diary, and TestFlight Internal distribution.
-2. **Phase 2 — Fallbacks, Multi-Device Sync & Migration:** Offline `GRDB` delta sync (`sync_seq`), VisionKit Barcode Scanner + USDA/OFF lookup + Label OCR fallback, Manual Search + AI text estimator, and **MyFitnessPal CSV/ZIP + Apple HealthKit Read** importers.
-3. **Phase 3 — Full Portability, HealthKit Write & Polish:** Idempotent HealthKit write sync, one-tap full ZIP Export/Restore + Obsidian daily Markdown export, in-app Account Deletion (`/auth/revoke`), WidgetKit / Action Button App Intents, and Phase 2 Google Sign-In readiness.
+1. **Phase 1 — Full MVP (Core Photo-First + Fallbacks + Sync & Migration):**
+   - SwiftUI iOS + **iPhone Duo** adaptive shell (5.4" Folded + 7.6" Unfolded `NavigationSplitView` + fold/unfold continuity).
+   - **Sign in with Apple** (JWKS + ephemeral `.p8` + provider-agnostic identity schema) + **Swift VPS API** (`Hummingbird`/`Vapor` + Caddy TLS) + **PostgreSQL 17** + **Cloudflare R2** presigned HEIC storage.
+   - **Primary Capture & Review:** Photo AI Capture (optional 5-word hint, offline `"Pending AI"` queue, daily AI quota) + Review & Adjust (1-tap portion multipliers + collapsible Sauces, Oils & Seasonings drawer) + Today's Diary.
+   - **Fallbacks:** Native VisionKit **Barcode Scanner** (USDA Branded + Open Food Facts + Nutrition Facts Label OCR fallback) + **Manual Search & Default Calculator** (local SQLite FTS5 + USDA + AI text estimator).
+   - **Multi-Device Sync & Migration:** Offline-first `GRDB` SQLite delta sync (`sync_seq` cursor) across iPhone / iPhone Duo / iPad + **MyFitnessPal (CSV / ZIP) & Apple HealthKit Read** importers + TestFlight Internal distribution.
+2. **Phase 2 — Full Portability, HealthKit Write, Google Sign-In & Polish:**
+   - Idempotent **Apple HealthKit write** sync (`HKCorrelation` + `HKMetadataKeySyncIdentifier`).
+   - One-tap full portable **ZIP Export / Restore** (`manifest.json`, `diary.json`, CSVs, photos) + optional **Obsidian daily Markdown** export.
+   - In-app **Account Deletion** with Apple `/auth/revoke` compliance (Guideline 5.1.1(v) / TN3194).
+   - **Google Sign-In** provider integration + explicit authenticated account linking.
+   - Home/Lock Screen `WidgetKit`, iPhone Action Button `AppIntents`, and transition to Unlisted/Public App Store distribution.
 
 ---
 
-## 7. Open Questions for the Design Team
+## 7. Development Workflow
+
+This repository follows a **PR-based workflow**:
+- `main` is always kept clean and deployable.
+- All product, design, docs, and engineering changes are developed on dedicated branches (e.g., `docs/...`, `feat/...`, `fix/...`) and merged via **Pull Request** review.
+
+---
+
+## 8. Open Questions for the Design Team
 
 Please explore and propose visual solutions for these key UX decisions during design exploration:
 
