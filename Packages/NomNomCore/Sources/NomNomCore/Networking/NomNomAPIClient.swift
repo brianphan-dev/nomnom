@@ -85,8 +85,9 @@ public protocol NomNomAPIClientProtocol: Sendable {
 
 // MARK: - Actor API Client
 
-/// Offline-aware, Swift 6 actor HTTP client communicating with the nomnom backend API.
-/// Supports automatic Bearer auth injection and single-flight refresh token rotation on HTTP 401.
+/// Offline-aware, Swift 6 actor HTTP client communicating with the deployed nomnom VPS API.
+/// Preserves clean `NomNomShared` Swift signatures while encoding/decoding the exact server wire
+/// format via `ServerWireAdapter`, with automatic Bearer injection and single-flight HTTP 401 refresh.
 public actor NomNomAPIClient: NomNomAPIClientProtocol {
     public static let defaultBaseURL = URL(string: "https://api.nomnom.brianphan.dev")!
 
@@ -131,11 +132,14 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
     // MARK: - Auth
 
     public func signInWithApple(_ body: AppleAuthRequest) async throws -> AuthTokenResponse {
-        let (response, _): (AuthTokenResponse, HTTPURLResponse) = try await sendUnauthenticated(
-            method: "POST",
-            path: "/v1/auth/apple",
-            body: body
-        )
+        let wireBody = ServerWireAdapter.toServerAppleAuthRequest(body)
+        let (wireResponse, _): (ServerWireAdapter.ServerAuthSessionResponse, HTTPURLResponse) =
+            try await sendUnauthenticated(
+                method: "POST",
+                path: "/v1/auth/apple",
+                body: wireBody
+            )
+        let response = ServerWireAdapter.toDomainAuthTokenResponse(wireResponse)
         try credentialStore.saveAuthSession(response)
         return response
     }
@@ -147,45 +151,94 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
     }
 
     public func signOut() async throws {
-        let refreshToken = credentialStore.refreshToken
-        let deviceId = (try? credentialStore.getOrCreateDeviceId()) ?? ""
-
-        if let refreshToken, !refreshToken.isEmpty {
-            let payload = RefreshTokenRequest(refreshToken: refreshToken, deviceId: deviceId)
-            _ = try await sendAuthenticatedEmptyResponse(
+        let payload = ServerWireAdapter.ServerLogoutRequest(refreshToken: credentialStore.refreshToken)
+        if let accessToken = credentialStore.accessToken, !accessToken.isEmpty {
+            _ = try await executeAuthenticatedWithRetry(
                 method: "POST",
                 path: "/v1/auth/logout",
+                queryItems: [],
                 body: payload
             )
         } else {
-            _ = try await sendAuthenticatedEmptyResponse(
+            let request = try buildRequest(
                 method: "POST",
                 path: "/v1/auth/logout",
-                body: EmptyBody?.none
+                queryItems: [],
+                body: payload,
+                accessToken: nil
             )
+            let (data, httpResponse) = try await executeRaw(request)
+            try validateStatusCode(httpResponse: httpResponse, data: data)
         }
 
         try credentialStore.clearSession()
     }
 
     public func deleteAccount() async throws {
-        _ = try await sendAuthenticatedEmptyResponse(
+        _ = try await deleteAccountWithReceipt()
+    }
+
+    /// Permanently deletes the account via `DELETE /v1/account`, returning the server's
+    /// Apple token revocation receipt when present (Guideline 5.1.1(v) / TN3194).
+    public func deleteAccountWithReceipt() async throws -> ServerWireAdapter.ServerAccountDeletionResponse? {
+        let (data, httpResponse) = try await executeAuthenticatedWithRetry(
             method: "DELETE",
             path: "/v1/account",
+            queryItems: [],
             body: EmptyBody?.none
         )
+
+        var receipt: ServerWireAdapter.ServerAccountDeletionResponse?
+        if !data.isEmpty {
+            let decoded = try decode(ServerWireAdapter.ServerAccountDeletionResponse.self, from: data)
+            guard decoded.deleted else {
+                throw NomNomAPIError.serverError(
+                    statusCode: httpResponse.statusCode,
+                    envelope: APIErrorEnvelope(
+                        code: "account_deletion_incomplete",
+                        message: "Server did not confirm account deletion."
+                    )
+                )
+            }
+            receipt = decoded
+        }
+
         try credentialStore.clearSession()
+        return receipt
     }
 
     // MARK: - Sync
 
     public func pushSync(_ request: SyncPushRequest) async throws -> SyncPushResponse {
-        let (response, _): (SyncPushResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "POST",
-            path: "/v1/sync/push",
-            body: request
+        guard let wireRequest = ServerWireAdapter.toServerSyncPushRequest(request) else {
+            // Only non-meal local mutations were present; acknowledge cleanly without a remote call.
+            let acks = request.mutations.map { mutation in
+                SyncMutationAck(
+                    mutationId: mutation.mutationId,
+                    entityType: mutation.entityType,
+                    entityId: mutation.entityId,
+                    status: .applied,
+                    syncSeq: nil
+                )
+            }
+            return SyncPushResponse(
+                acceptedCount: acks.count,
+                latestSyncSeq: 0,
+                results: acks,
+                serverTime: Date()
+            )
+        }
+
+        let (wireResponse, _): (ServerWireAdapter.ServerSyncPushResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "POST",
+                path: "/v1/sync/push",
+                body: wireRequest
+            )
+        return ServerWireAdapter.toDomainSyncPushResponse(
+            wireResponse,
+            originalMutations: request.mutations
         )
-        return response
     }
 
     public func fetchSyncChanges(afterSeq: Int64, limit: Int = 200) async throws -> SyncChangesResponse {
@@ -193,24 +246,27 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
             URLQueryItem(name: "after_seq", value: String(afterSeq)),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
-        let (response, _): (SyncChangesResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "GET",
-            path: "/v1/sync/changes",
-            queryItems: queryItems,
-            body: EmptyBody?.none
-        )
-        return response
+        let (wireResponse, _): (ServerWireAdapter.ServerSyncChangesResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "GET",
+                path: "/v1/sync/changes",
+                queryItems: queryItems,
+                body: EmptyBody?.none
+            )
+        return ServerWireAdapter.toDomainSyncChangesResponse(wireResponse, sinceSeq: afterSeq)
     }
 
     // MARK: - Photos
 
     public func presignPhotoUpload(_ request: PresignUploadRequest) async throws -> PresignUploadResponse {
-        let (response, _): (PresignUploadResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "POST",
-            path: "/v1/photos/presign-upload",
-            body: request
-        )
-        return response
+        let wireBody = ServerWireAdapter.toServerPresignUploadRequest(request)
+        let (wireResponse, _): (ServerWireAdapter.ServerPhotoPresignUploadResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "POST",
+                path: "/v1/photos/presign-upload",
+                body: wireBody
+            )
+        return ServerWireAdapter.toDomainPresignUploadResponse(wireResponse)
     }
 
     public func uploadPhotoToPresignedURL(_ url: URL, data: Data, contentType: String) async throws {
@@ -237,12 +293,13 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
     }
 
     public func photoDownloadURL(photoId: UUID) async throws -> PhotoDownloadURLResponse {
-        let (response, _): (PhotoDownloadURLResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "GET",
-            path: "/v1/photos/\(photoId.uuidString.lowercased())/download-url",
-            body: EmptyBody?.none
-        )
-        return response
+        let (wireResponse, _): (ServerWireAdapter.ServerPhotoDownloadURLResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "GET",
+                path: "/v1/photos/\(photoId.uuidString.lowercased())/url",
+                body: EmptyBody?.none
+            )
+        return ServerWireAdapter.toDomainPhotoDownloadURLResponse(wireResponse)
     }
 
     // MARK: - AI Analysis
@@ -250,25 +307,31 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
     public func analyzeMealPhoto(
         _ request: AnalyzeMealPhotoRequest
     ) async throws -> (AnalyzeMealResponse, quotaRemaining: Int?) {
-        let (decoded, httpResponse): (AnalyzeMealResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "POST",
-            path: "/v1/ai/analyze-meal-photo",
-            body: request
-        )
-        let quotaRemaining = parseQuotaRemaining(from: httpResponse) ?? decoded.quota?.remainingToday
-        return (decoded, quotaRemaining)
+        let wireBody = ServerWireAdapter.toServerAnalyzeMealPhotoRequest(request)
+        let (wireResponse, httpResponse): (ServerWireAdapter.ServerAIMealAnalysisResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "POST",
+                path: "/v1/ai/analyze-meal-photo",
+                body: wireBody
+            )
+        let domainResponse = ServerWireAdapter.toDomainAnalyzeMealResponse(wireResponse)
+        let quotaRemaining = parseQuotaRemaining(from: httpResponse) ?? wireResponse.quotaRemaining
+        return (domainResponse, quotaRemaining)
     }
 
     public func estimateMealText(
         _ request: EstimateMealTextRequest
     ) async throws -> (AnalyzeMealResponse, quotaRemaining: Int?) {
-        let (decoded, httpResponse): (AnalyzeMealResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "POST",
-            path: "/v1/ai/estimate-meal-text",
-            body: request
-        )
-        let quotaRemaining = parseQuotaRemaining(from: httpResponse) ?? decoded.quota?.remainingToday
-        return (decoded, quotaRemaining)
+        let wireBody = ServerWireAdapter.toServerEstimateMealTextRequest(request)
+        let (wireResponse, httpResponse): (ServerWireAdapter.ServerAIMealAnalysisResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "POST",
+                path: "/v1/ai/estimate-meal-text",
+                body: wireBody
+            )
+        let domainResponse = ServerWireAdapter.toDomainAnalyzeMealResponse(wireResponse)
+        let quotaRemaining = parseQuotaRemaining(from: httpResponse) ?? wireResponse.quotaRemaining
+        return (domainResponse, quotaRemaining)
     }
 
     // MARK: - Food & Barcode Lookup
@@ -276,25 +339,37 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
     public func lookupBarcode(_ gtin: String) async throws -> BarcodeLookupResponse {
         let cleaned = gtin.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoded = cleaned.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? cleaned
-        let (response, _): (BarcodeLookupResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "GET",
-            path: "/v1/foods/barcode/\(encoded)",
-            body: EmptyBody?.none
-        )
-        return response
+        do {
+            let (wireFood, _): (ServerWireAdapter.ServerFoodItemDTO, HTTPURLResponse) =
+                try await sendAuthenticated(
+                    method: "GET",
+                    path: "/v1/foods/barcode/\(encoded)",
+                    body: EmptyBody?.none
+                )
+            return ServerWireAdapter.toDomainBarcodeLookupResponse(wireFood, requestedGTIN: cleaned)
+        } catch NomNomAPIError.notFound {
+            return BarcodeLookupResponse(
+                barcode: cleaned,
+                found: false,
+                foodItem: nil,
+                source: nil,
+                cached: false
+            )
+        }
     }
 
     public func searchFoods(query: String) async throws -> FoodSearchResponse {
         let queryItems = [
             URLQueryItem(name: "q", value: query),
         ]
-        let (response, _): (FoodSearchResponse, HTTPURLResponse) = try await sendAuthenticated(
-            method: "GET",
-            path: "/v1/foods/search",
-            queryItems: queryItems,
-            body: EmptyBody?.none
-        )
-        return response
+        let (wireResponse, _): (ServerWireAdapter.ServerFoodSearchResponse, HTTPURLResponse) =
+            try await sendAuthenticated(
+                method: "GET",
+                path: "/v1/foods/search",
+                queryItems: queryItems,
+                body: EmptyBody?.none
+            )
+        return ServerWireAdapter.toDomainFoodSearchResponse(wireResponse)
     }
 
     // MARK: - Internal Transport & Single-Flight Refresh
@@ -334,12 +409,17 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
 
         let task = Task<AuthTokenResponse, Error> {
             defer { self.inFlightRefreshTask = nil }
-            let payload = RefreshTokenRequest(refreshToken: refreshToken, deviceId: deviceId)
-            let (refreshed, _): (AuthTokenResponse, HTTPURLResponse) = try await self.sendUnauthenticated(
-                method: "POST",
-                path: "/v1/auth/refresh",
-                body: payload
+            let wirePayload = ServerWireAdapter.ServerRefreshTokenRequest(
+                refreshToken: refreshToken,
+                deviceID: deviceId
             )
+            let (wireRefreshed, _): (ServerWireAdapter.ServerAuthSessionResponse, HTTPURLResponse) =
+                try await self.sendUnauthenticated(
+                    method: "POST",
+                    path: "/v1/auth/refresh",
+                    body: wirePayload
+                )
+            let refreshed = ServerWireAdapter.toDomainAuthTokenResponse(wireRefreshed)
             try self.credentialStore.saveAuthSession(refreshed)
             return refreshed
         }
@@ -381,21 +461,6 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
         )
         let decoded = try decode(Response.self, from: data)
         return (decoded, httpResponse)
-    }
-
-    private func sendAuthenticatedEmptyResponse<Body: Encodable>(
-        method: String,
-        path: String,
-        queryItems: [URLQueryItem] = [],
-        body: Body?
-    ) async throws -> HTTPURLResponse {
-        let (_, httpResponse) = try await executeAuthenticatedWithRetry(
-            method: method,
-            path: path,
-            queryItems: queryItems,
-            body: body
-        )
-        return httpResponse
     }
 
     private func executeAuthenticatedWithRetry<Body: Encodable>(
@@ -547,8 +612,7 @@ public actor NomNomAPIClient: NomNomAPIClientProtocol {
     }
 
     private func decodeEnvelope(from data: Data) -> APIErrorEnvelope? {
-        guard !data.isEmpty else { return nil }
-        return try? decoder.decode(APIErrorEnvelope.self, from: data)
+        ServerWireAdapter.decodeErrorEnvelope(from: data, decoder: decoder)
     }
 
     private func parseQuotaRemaining(from response: HTTPURLResponse) -> Int? {

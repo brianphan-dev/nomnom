@@ -16,12 +16,19 @@ struct AppStoreTests {
         defer { ScopedMockURLProtocol.removeHandler(routeID: routeID) }
 
         let user = TestFixtures.makeUser()
-        let authResponse = AuthTokenResponse(
+        let serverAuth = ServerWireAdapter.ServerAuthSessionResponse(
             accessToken: "app-access-token",
-            refreshToken: "app-refresh-token",
             tokenType: "Bearer",
-            expiresInSeconds: 3600,
-            user: user
+            expiresIn: 900,
+            refreshToken: "app-refresh-token",
+            refreshExpiresIn: 2_592_000,
+            user: ServerWireAdapter.ServerAuthUserDTO(
+                id: user.id,
+                displayName: user.displayName,
+                email: user.email,
+                isPrivateEmail: user.isPrivateEmail,
+                createdAt: user.createdAt
+            )
         )
 
         let session = ScopedMockURLProtocol.makeSession(routeID: routeID) { request, _ in
@@ -30,27 +37,36 @@ struct AppStoreTests {
             case ("POST", "/v1/auth/apple"):
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
-                    try TestFixtures.encodeJSON(authResponse)
+                    try TestFixtures.encodeJSON(serverAuth)
                 )
             case ("GET", "/healthz"):
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
-                    Data(#"{"status":"ok"}"#.utf8)
+                    Data(#"{"status":"ok","service":"nomnom-api","version":"0.1.0"}"#.utf8)
                 )
             case ("POST", "/v1/ai/analyze-meal-photo"):
-                let ai = AnalyzeMealResponse(
-                    suggestedTitle: "Avocado Chicken Salad",
-                    suggestedMealType: .lunch,
+                let ai = ServerWireAdapter.ServerAIMealAnalysisResponse(
+                    provider: "gemini",
+                    model: "gemini-2.5-flash-lite",
+                    mealTitle: "Avocado Chicken Salad",
                     items: [
-                        DetectedMealItemDTO(
-                            displayName: "Grilled Chicken Salad",
+                        ServerWireAdapter.ServerAIEstimatedItemDTO(
+                            name: "Grilled Chicken Salad",
                             servingLabel: "1 bowl (320g)",
-                            gramWeight: 320,
-                            confidence: 0.92,
-                            nutrition: NutritionSnapshot(caloriesKcal: 480, proteinG: 44, carbsG: 18, fatG: 26)
+                            servingGrams: 320,
+                            calories: 480,
+                            proteinG: 44,
+                            carbsG: 18,
+                            fatG: 26,
+                            confidence: 0.92
                         ),
                     ],
-                    modelUsed: "gemini-3.5-flash-lite"
+                    totalCalories: 480,
+                    totalProteinG: 44,
+                    totalCarbsG: 18,
+                    totalFatG: 26,
+                    quotaRemaining: 18,
+                    quotaLimit: 20
                 )
                 return (
                     TestFixtures.makeHTTPResponse(
@@ -61,7 +77,16 @@ struct AppStoreTests {
                     try TestFixtures.encodeJSON(ai)
                 )
             case ("DELETE", "/v1/account"):
-                return (TestFixtures.makeHTTPResponse(url: url, statusCode: 204), Data())
+                let deletion = ServerWireAdapter.ServerAccountDeletionResponse(
+                    deleted: true,
+                    appleTokenRevoked: true,
+                    requiresManualAppleRevocation: false,
+                    userID: user.id
+                )
+                return (
+                    TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
+                    try TestFixtures.encodeJSON(deletion)
+                )
             default:
                 return (TestFixtures.makeHTTPResponse(url: url, statusCode: 404), Data())
             }
@@ -105,8 +130,7 @@ struct AppStoreTests {
         )
         #expect(appStore.isSignedIn == true)
         #expect(appStore.currentUser?.id == user.id)
-        #expect(appStore.targets.caloriesKcal == 2200)
-        #expect(appStore.targets.proteinG == 165)
+        #expect(appStore.currentUser?.displayName == "Brian Phan")
 
         // 3. Log a meal with a toggleable optional cooking oil ingredient.
         let oliveOil = IngredientEstimate(
@@ -250,14 +274,23 @@ struct AppStoreTests {
         defer { ScopedMockURLProtocol.removeHandler(routeID: routeID) }
 
         let barcodeCalls = OSAllocatedUnfairLock(initialState: 0)
-        let serverTime = TestFixtures.fixedDate("2026-11-27T17:00:00Z")
-        let scannedFood = FoodItem(
+        let scannedFood = ServerWireAdapter.ServerFoodItemDTO(
+            barcodeGTIN: "0811620021951",
             name: "Fairlife Core Power Elite",
             brand: "Fairlife",
-            barcode: "0811620021951",
-            source: .usda,
-            nutritionPer100g: NutritionSnapshot(caloriesKcal: 56, proteinG: 10.2, carbsG: 1.7, fatG: 0.8),
-            servingOptions: [ServingOption(label: "1 bottle (414ml)", gramWeight: 414, isDefault: true)]
+            source: "usda",
+            caloriesPer100g: 56,
+            proteinGPer100g: 10.2,
+            carbsGPer100g: 1.7,
+            fatGPer100g: 0.8,
+            servingOptions: [
+                ServerWireAdapter.ServerServingOptionDTO(
+                    label: "1 bottle (414ml)",
+                    grams: 414,
+                    isDefault: true
+                ),
+            ],
+            cacheHit: false
         )
 
         let session = ScopedMockURLProtocol.makeSession(routeID: routeID) { request, body in
@@ -265,27 +298,33 @@ struct AppStoreTests {
             switch (request.httpMethod, url.path) {
             case ("GET", "/v1/foods/barcode/0811620021951"):
                 barcodeCalls.withLock { $0 += 1 }
-                let res = BarcodeLookupResponse(
-                    barcode: "0811620021951",
-                    found: true,
-                    foodItem: scannedFood,
-                    source: .usda,
-                    cached: false
+                return (
+                    TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
+                    try TestFixtures.encodeJSON(scannedFood)
                 )
-                return (TestFixtures.makeHTTPResponse(url: url, statusCode: 200), try TestFixtures.encodeJSON(res))
 
             case ("POST", "/v1/ai/estimate-meal-text"):
-                let res = AnalyzeMealResponse(
-                    suggestedTitle: "Pho Tai",
-                    suggestedMealType: .dinner,
+                let res = ServerWireAdapter.ServerAIMealAnalysisResponse(
+                    provider: "gemini",
+                    model: "gemini-2.5-flash-lite",
+                    mealTitle: "Pho Tai",
                     items: [
-                        DetectedMealItemDTO(
-                            displayName: "Pho Tai",
+                        ServerWireAdapter.ServerAIEstimatedItemDTO(
+                            name: "Pho Tai",
                             servingLabel: "1 medium bowl",
-                            confidence: 0.85,
-                            nutrition: NutritionSnapshot(caloriesKcal: 620, proteinG: 38, carbsG: 76, fatG: 16)
+                            calories: 620,
+                            proteinG: 38,
+                            carbsG: 76,
+                            fatG: 16,
+                            confidence: 0.85
                         ),
-                    ]
+                    ],
+                    totalCalories: 620,
+                    totalProteinG: 38,
+                    totalCarbsG: 76,
+                    totalFatG: 16,
+                    quotaRemaining: 12,
+                    quotaLimit: 30
                 )
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200, headers: ["X-AI-Quota-Remaining": "12"]),
@@ -293,29 +332,30 @@ struct AppStoreTests {
                 )
 
             case ("POST", "/v1/sync/push"):
-                let req = try NomNomJSON.makeDecoder().decode(SyncPushRequest.self, from: try #require(body))
-                let acks = req.mutations.map {
-                    SyncMutationAck(
-                        mutationId: $0.mutationId,
-                        entityType: $0.entityType,
-                        entityId: $0.entityId,
-                        status: .applied,
-                        syncSeq: 20
-                    )
-                }
+                let req = try NomNomJSON.makeDecoder().decode(
+                    ServerWireAdapter.ServerSyncPushRequest.self,
+                    from: try #require(body)
+                )
+                let pushRes = ServerWireAdapter.ServerSyncPushResponse(
+                    idempotencyKey: req.idempotencyKey,
+                    appliedCount: req.mutations.count,
+                    latestSyncSeq: 20,
+                    meals: req.mutations.compactMap(\.meal)
+                )
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
-                    try TestFixtures.encodeJSON(
-                        SyncPushResponse(acceptedCount: acks.count, latestSyncSeq: 20, results: acks, serverTime: serverTime)
-                    )
+                    try TestFixtures.encodeJSON(pushRes)
                 )
 
             case ("GET", "/v1/sync/changes"):
+                let changes = ServerWireAdapter.ServerSyncChangesResponse(
+                    changes: [],
+                    nextSeq: 20,
+                    hasMore: false
+                )
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
-                    try TestFixtures.encodeJSON(
-                        SyncChangesResponse(sinceSeq: 0, nextSeq: 20, hasMore: false, serverTime: serverTime)
-                    )
+                    try TestFixtures.encodeJSON(changes)
                 )
 
             default:
@@ -377,6 +417,6 @@ struct AppStoreTests {
         #expect(report.pushedCount >= 3)
         #expect(appStore.syncStatus == .synced)
         #expect(appStore.queuedCount == 0)
-        #expect(appStore.lastSyncedAt == serverTime)
+        #expect(appStore.lastSyncedAt != nil)
     }
 }

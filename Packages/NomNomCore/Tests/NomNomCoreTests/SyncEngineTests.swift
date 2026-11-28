@@ -4,11 +4,11 @@ import NomNomShared
 import os
 import Testing
 
-@Suite("SyncEngine End-to-End Push & Pull")
+@Suite("SyncEngine End-to-End Push & Pull (VPS Wire Contract)")
 struct SyncEngineTests {
     private let baseURL = URL(string: "https://api.nomnom.test")!
 
-    @Test("Offline save queues outbox, reconnect pushes idempotently and pulls remote meals + tombstones")
+    @Test("Offline save queues outbox, reconnect pushes VPS SyncPushRequest and pulls paginated ServerSyncChangesResponse")
     func offlineToOnlinePushThenPaginatedPull() async throws {
         let routeID = UUID().uuidString
         defer { ScopedMockURLProtocol.removeHandler(routeID: routeID) }
@@ -64,14 +64,17 @@ struct SyncEngineTests {
             return copy
         }()
 
+        let wireSecondDeviceMeal = ServerWireAdapter.toServerMealRecord(secondDeviceMeal)
+        let wireTombstonedMeal = ServerWireAdapter.toServerMealRecord(tombstonedFromDevice2)
+
         struct BackendState: Sendable {
             var isOffline = true
-            var pushedMutationIds: [UUID] = []
-            var pushedDeviceIds: [String] = []
+            var pushedIdempotencyKeys: [String] = []
+            var pushedMealIds: [UUID] = []
+            var pushedCaptureMethods: [String] = []
             var changeCursorsRequested: [Int64] = []
         }
         let backend = OSAllocatedUnfairLock(initialState: BackendState())
-        let serverTime = TestFixtures.fixedDate("2026-11-27T20:00:00Z")
 
         let session = ScopedMockURLProtocol.makeSession(routeID: routeID) { request, body in
             let isOffline = backend.withLock(\.isOffline)
@@ -82,26 +85,24 @@ struct SyncEngineTests {
             let url = request.url!
             if url.path == "/v1/sync/push" {
                 let rawBody = try #require(body)
-                let pushReq = try NomNomJSON.makeDecoder().decode(SyncPushRequest.self, from: rawBody)
+                let pushReq = try NomNomJSON.makeDecoder().decode(
+                    ServerWireAdapter.ServerSyncPushRequest.self,
+                    from: rawBody
+                )
                 backend.withLock {
-                    $0.pushedDeviceIds.append(pushReq.deviceId)
-                    $0.pushedMutationIds.append(contentsOf: pushReq.mutations.map(\.mutationId))
-                }
-
-                let acks = pushReq.mutations.map { mutation in
-                    SyncMutationAck(
-                        mutationId: mutation.mutationId,
-                        entityType: mutation.entityType,
-                        entityId: mutation.entityId,
-                        status: .applied,
-                        syncSeq: 10
+                    $0.pushedIdempotencyKeys.append(pushReq.idempotencyKey)
+                    $0.pushedMealIds.append(contentsOf: pushReq.mutations.map(\.mealID))
+                    $0.pushedCaptureMethods.append(
+                        contentsOf: pushReq.mutations.compactMap { $0.meal?.captureMethod.rawValue }
                     )
                 }
-                let pushRes = SyncPushResponse(
-                    acceptedCount: acks.count,
+
+                let appliedMeals = pushReq.mutations.compactMap(\.meal)
+                let pushRes = ServerWireAdapter.ServerSyncPushResponse(
+                    idempotencyKey: pushReq.idempotencyKey,
+                    appliedCount: pushReq.mutations.count,
                     latestSyncSeq: 10,
-                    results: acks,
-                    serverTime: serverTime
+                    meals: appliedMeals
                 )
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
@@ -115,22 +116,18 @@ struct SyncEngineTests {
                     .flatMap(Int64.init) ?? 0
                 backend.withLock { $0.changeCursorsRequested.append(afterSeq) }
 
-                let response: SyncChangesResponse
+                let response: ServerWireAdapter.ServerSyncChangesResponse
                 if afterSeq < 12 {
-                    response = SyncChangesResponse(
-                        sinceSeq: afterSeq,
+                    response = ServerWireAdapter.ServerSyncChangesResponse(
+                        changes: [wireSecondDeviceMeal],
                         nextSeq: 12,
-                        hasMore: true,
-                        meals: [secondDeviceMeal],
-                        serverTime: serverTime
+                        hasMore: true
                     )
                 } else {
-                    response = SyncChangesResponse(
-                        sinceSeq: afterSeq,
+                    response = ServerWireAdapter.ServerSyncChangesResponse(
+                        changes: [wireTombstonedMeal],
                         nextSeq: 13,
-                        hasMore: false,
-                        meals: [tombstonedFromDevice2],
-                        serverTime: serverTime
+                        hasMore: false
                     )
                 }
                 return (
@@ -166,11 +163,13 @@ struct SyncEngineTests {
         #expect(syncedSnapshot.status == .synced)
         #expect(syncedSnapshot.queuedCount == 0)
         #expect(syncedSnapshot.lastSyncSeq == 13)
-        #expect(syncedSnapshot.lastSyncedAt == serverTime)
+        #expect(syncedSnapshot.lastSyncedAt != nil)
 
         let serverSnapshot = backend.withLock { $0 }
-        #expect(serverSnapshot.pushedDeviceIds == ["iphone-16-pro"])
-        #expect(serverSnapshot.pushedMutationIds.count == 1)
+        #expect(serverSnapshot.pushedIdempotencyKeys.count == 1)
+        #expect(serverSnapshot.pushedIdempotencyKeys[0].count == 64)
+        #expect(serverSnapshot.pushedMealIds == [offlineMeal.id])
+        #expect(serverSnapshot.pushedCaptureMethods == ["photo"])
         #expect(serverSnapshot.changeCursorsRequested == [5, 12])
 
         // Step 3: Verify BOTH Device 1 and Device 2 meals exist in SQLite and tombstone is hidden.
@@ -180,8 +179,8 @@ struct SyncEngineTests {
         #expect(try await store.meal(id: mealToBeTombstoned.id)?.isDeleted == true)
     }
 
-    @Test("Duplicate ack status is treated as idempotent success and concurrent syncNow calls coalesce")
-    func duplicateAckAndSingleFlightSyncCoalescing() async throws {
+    @Test("Concurrent syncNow calls coalesce onto one VPS push and drain non-meal local outbox cleanly")
+    func singleFlightSyncCoalescingAndNonMealOutboxAck() async throws {
         let routeID = UUID().uuidString
         defer { ScopedMockURLProtocol.removeHandler(routeID: routeID) }
 
@@ -200,25 +199,30 @@ struct SyncEngineTests {
             if url.path == "/v1/sync/push" {
                 Thread.sleep(forTimeInterval: 0.04)
                 pushCallCount.withLock { $0 += 1 }
-                let req = try NomNomJSON.makeDecoder().decode(SyncPushRequest.self, from: try #require(body))
-                let acks = req.mutations.map {
-                    SyncMutationAck(
-                        mutationId: $0.mutationId,
-                        entityType: $0.entityType,
-                        entityId: $0.entityId,
-                        status: .duplicate,
-                        syncSeq: 7
-                    )
-                }
+                let req = try NomNomJSON.makeDecoder().decode(
+                    ServerWireAdapter.ServerSyncPushRequest.self,
+                    from: try #require(body)
+                )
+                let pushRes = ServerWireAdapter.ServerSyncPushResponse(
+                    idempotencyKey: req.idempotencyKey,
+                    appliedCount: req.mutations.count,
+                    latestSyncSeq: 7,
+                    meals: req.mutations.compactMap(\.meal)
+                )
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
-                    try TestFixtures.encodeJSON(SyncPushResponse(acceptedCount: 0, latestSyncSeq: 7, results: acks))
+                    try TestFixtures.encodeJSON(pushRes)
                 )
             }
             if url.path == "/v1/sync/changes" {
+                let changes = ServerWireAdapter.ServerSyncChangesResponse(
+                    changes: [],
+                    nextSeq: 7,
+                    hasMore: false
+                )
                 return (
                     TestFixtures.makeHTTPResponse(url: url, statusCode: 200),
-                    try TestFixtures.encodeJSON(SyncChangesResponse(sinceSeq: 0, nextSeq: 7, hasMore: false))
+                    try TestFixtures.encodeJSON(changes)
                 )
             }
             return (TestFixtures.makeHTTPResponse(url: url, statusCode: 404), Data())
