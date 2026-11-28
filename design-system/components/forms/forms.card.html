@@ -1,0 +1,64 @@
+<!-- @dsCard group="Components" viewport="700x400" name="Forms" subtitle="TextField, SegmentedControl, Checkbox, Switch, Stepper" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Forms</title>
+<link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="../card.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+const { TextField, SegmentedControl, Checkbox, Switch, Stepper, Card, IconButton } = window.NomnomDesignSystem_ec1f66;
+function App() {
+  const [q, setQ] = React.useState('greek yog');
+  const [type, setType] = React.useState('Lunch');
+  const [mode, setMode] = React.useState('photo');
+  const [mult, setMult] = React.useState(1);
+  const [oil, setOil] = React.useState(true);
+  const [glaze, setGlaze] = React.useState(false);
+  const [hk, setHk] = React.useState(true);
+  const [qty, setQty] = React.useState(1.5);
+  return (
+    <div className="cols">
+      <div className="stack">
+        <div>
+          <p className="lbl">TextField</p>
+          <div className="stack" style={{ gap: 8 }}>
+            <TextField icon="magnifying-glass" placeholder="Search foods" value={q} onChange={setQ} clearable surface="card" />
+            <TextField icon="sparkle" placeholder="Describe a meal to estimate" surface="card" trailing={<IconButton icon="microphone" label="Dictate" size={32} />} />
+          </div>
+        </div>
+        <div>
+          <p className="lbl">SegmentedControl</p>
+          <div className="stack" style={{ gap: 8 }}>
+            <SegmentedControl options={['Breakfast', 'Lunch', 'Dinner', 'Snack']} value={type} onChange={setType} />
+            <SegmentedControl size="sm" numeric options={[0.5, 0.75, 1, 1.25, 1.5, 2].map(p => ({ value: p, label: p + '×' }))} value={mult} onChange={setMult} />
+            <div className="dark-tile"><SegmentedControl tone="dark" value={mode} onChange={setMode} options={[{ value: 'photo', label: 'Photo AI', icon: 'sparkle' }, { value: 'barcode', label: 'Barcode', icon: 'barcode' }, { value: 'manual', label: 'Manual', icon: 'pencil-simple' }]} /></div>
+          </div>
+        </div>
+      </div>
+      <div className="stack">
+        <div>
+          <p className="lbl">Checkbox</p>
+          <Card padding="md" style={{ paddingTop: 6, paddingBottom: 6 }}>
+            <Checkbox checked={oil} onChange={setOil} label="Olive oil" description="2 tsp" trailing="+80" dimUnchecked />
+            <Checkbox checked={glaze} onChange={setGlaze} label="Soy glaze" description="1 tbsp" trailing="+25" dimUnchecked />
+          </Card>
+        </div>
+        <div className="cols">
+          <div>
+            <p className="lbl">Switch</p>
+            <div className="row"><Switch checked={hk} onChange={setHk} label="Apple Health" /><Switch checked={false} label="Off" /></div>
+          </div>
+          <div>
+            <p className="lbl">Stepper</p>
+            <Stepper value={qty} onChange={setQty} min={0.5} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body></html>

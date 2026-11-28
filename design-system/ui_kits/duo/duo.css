@@ -1,0 +1,18 @@
+/* iPhone Duo frame + week trend. Layout only. */
+.duo{position:relative;display:flex;border-radius:40px;overflow:hidden;background:var(--bg-app);box-shadow:0 0 0 9px var(--stone-950),0 0 0 10px var(--stone-600),0 40px 80px oklch(0 0 0 / 0.18);--safe-top:52px;--safe-bottom:24px}
+.duo--unfolded{--safe-top:44px}
+.duo__pane{position:relative;flex:1;min-width:0;overflow:hidden}
+.duo__hinge{position:relative;flex:none;width:0;z-index:30}
+.duo__hinge::after{content:"";position:absolute;top:0;bottom:0;left:-14px;width:28px;background:linear-gradient(90deg,transparent,oklch(0 0 0 / 0.09) 46%,oklch(1 0 0 / 0.12) 54%,transparent);pointer-events:none}
+.duo__status{position:absolute;z-index:20;top:0;left:0;right:0;height:var(--safe-top);box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0;font:600 15px/1 var(--font-sans);color:var(--text-primary);pointer-events:none}
+.duo__status>span:last-child{display:flex;align-items:center;gap:6px}
+.duo__island{position:absolute;z-index:21;top:10px;left:50%;transform:translateX(-50%);width:108px;height:32px;border-radius:20px;background:#000}
+.duo__home{position:absolute;z-index:20;bottom:7px;left:50%;transform:translateX(-50%);width:130px;height:5px;border-radius:9px;background:var(--text-primary);opacity:.3;pointer-events:none}
+.duo .scr__dock{bottom:20px}
+.week{position:relative;display:flex;align-items:flex-end;gap:10px;height:130px;margin:24px 0 22px}
+.week__col{position:relative;flex:1;height:100%;display:flex;align-items:flex-end}
+.week__bar{width:100%;border-radius:10px 10px 4px 4px;background:var(--fill-2)}
+.week__col.is-today .week__bar{background:var(--accent)}
+.week__col>span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font:var(--type-caption);color:var(--text-secondary)}
+.week__target{position:absolute;z-index:1;left:0;right:0;border-top:1px dashed var(--border-strong)}
+.week__target>span{position:absolute;right:0;top:-16px;font:var(--type-num-xs);color:var(--text-tertiary)}

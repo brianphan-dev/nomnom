@@ -1,0 +1,46 @@
+:root{
+/* 4pt grid */
+--space-half:2px;
+--space-1:4px;
+--space-2:8px;
+--space-3:12px;
+--space-4:16px;
+--space-5:20px;
+--space-6:24px;
+--space-8:32px;
+--space-10:40px;
+--space-12:48px;
+--space-16:64px;
+--screen-margin:20px;
+--safe-top:59px;
+--safe-bottom:34px;
+--tap-min:44px;
+--control-sm:32px;
+--control-md:44px;
+--control-lg:56px;
+/* Radii: round by default */
+--radius-8:8px;
+--radius-12:12px;
+--radius-16:16px;
+--radius-20:20px;
+--radius-28:28px;
+--radius-36:36px;
+--radius-pill:999px;
+--radius-thumb:var(--radius-16);
+--radius-banner:var(--radius-20);
+--radius-card:var(--radius-28);
+--radius-sheet:var(--radius-36);
+--radius-control:var(--radius-pill);
+/* Elevation: only floating chrome casts a shadow */
+--shadow-knob:0 1px 3px oklch(0.2 0.01 255 / 0.22);
+--shadow-float:0 1px 2px oklch(0.2 0.01 255 / 0.06),0 12px 32px -8px oklch(0.2 0.01 255 / 0.22);
+--shadow-sheet:0 -8px 40px -8px oklch(0.2 0.01 255 / 0.2);
+--blur-chrome:saturate(180%) blur(20px); /* @kind other */
+/* Motion */
+--ease-out:cubic-bezier(0.32,0.72,0,1); /* @kind other */
+--ease-standard:cubic-bezier(0.4,0,0.2,1); /* @kind other */
+--dur-fast:120ms; /* @kind other */
+--dur-base:220ms; /* @kind other */
+--dur-sheet:420ms; /* @kind other */
+--press-scale:0.97; /* @kind other */
+}
