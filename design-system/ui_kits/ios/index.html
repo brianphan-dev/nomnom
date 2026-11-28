@@ -1,0 +1,94 @@
+<!-- @dsCard group="iOS App" viewport="520x1010" name="iPhone app" subtitle="Click-through: sign in, Today, capture, AI review, meal detail, settings, import" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>nomnom · iPhone UI kit</title>
+<link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="kit.css">
+<style>
+.stage{min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:20px;padding:20px 20px 40px;background:color-mix(in oklch,var(--bg-app) 90%,var(--ink))}
+.stage__controls{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="data.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="ServingSheet.jsx"></script>
+<script type="text/babel" src="SignInScreen.jsx"></script>
+<script type="text/babel" src="TodayScreen.jsx"></script>
+<script type="text/babel" src="CaptureScreen.jsx"></script>
+<script type="text/babel" src="ReviewScreen.jsx"></script>
+<script type="text/babel" src="MealDetailScreen.jsx"></script>
+<script type="text/babel" src="SettingsScreen.jsx"></script>
+<script type="text/babel" src="ImportScreen.jsx"></script>
+<script type="text/babel">
+(function () {
+  const { SegmentedControl, Button } = window.NomnomDesignSystem_ec1f66;
+  const D = window.NN_DATA;
+  const analysed = () => ({
+    pending: false, title: D.detectedTitle, kcal: 697, protein: 47, carbs: 57, fat: 30,
+    items: D.detected.concat(D.extras).map(i => ({ name: i.name, serving: i.serving, kcal: i.kcal })),
+  });
+
+  function App() {
+    const [theme, setTheme] = React.useState('light');
+    const [net, setNet] = React.useState('online');
+    const [screen, setScreen] = React.useState(() => localStorage.getItem('nn-ios-screen') || 'signin');
+    const [mode, setMode] = React.useState('photo');
+    const [meals, setMeals] = React.useState(D.meals);
+    const [sel, setSel] = React.useState(null);
+    const [syncing, setSyncing] = React.useState(false);
+    const offline = net === 'offline';
+    const pending = meals.filter(m => m.pending).length;
+
+    React.useEffect(() => {
+      localStorage.setItem('nn-ios-screen', ['signin', 'settings', 'import'].includes(screen) ? screen : 'today');
+    }, [screen]);
+    // Back online: queued photos get analysed and synced.
+    React.useEffect(() => {
+      if (offline || !pending) return undefined;
+      setSyncing(true);
+      const t = setTimeout(() => { setMeals(ms => ms.map(m => (m.pending ? { ...m, ...analysed() } : m))); setSyncing(false); }, 1800);
+      return () => clearTimeout(t);
+    }, [offline, pending]);
+
+    const add = m => {
+      setMeals(ms => [{ id: 'n' + Date.now(), time: '19:05', mealType: 'Dinner', ...m }].concat(ms));
+      setScreen('today');
+      if (!offline && !m.pending) { setSyncing(true); setTimeout(() => setSyncing(false), 1500); }
+    };
+    const open = m => { setMode(m); setScreen('capture'); };
+    const captured = c => (c.pending ? add({ title: 'Dinner photo', pending: true, method: 'photo_ai' }) : setScreen('review'));
+
+    let el;
+    if (screen === 'signin') el = <SignInScreen onSignIn={() => setScreen('today')} onImport={() => setScreen('import')} />;
+    else if (screen === 'today') el = <TodayScreen meals={meals} sync={offline ? 'offline' : syncing ? 'syncing' : 'synced'} queued={pending || undefined}
+      onSnap={() => open('photo')} onBarcode={() => open('barcode')} onManual={() => open('manual')}
+      onMeal={m => { setSel(m.id); setScreen('detail'); }} onSettings={() => setScreen('settings')} onImport={() => setScreen('import')} />;
+    else if (screen === 'capture') el = <CaptureScreen mode={mode} onMode={setMode} onClose={() => setScreen('today')} onCaptured={captured}
+      onAdd={m => add({ mealType: 'Snack', ...m })} onEstimate={() => setScreen('review')} offline={offline} quotaLeft={3} />;
+    else if (screen === 'review') el = <ReviewScreen onClose={() => setScreen('today')} onRetake={() => open('photo')} onSave={add} />;
+    else if (screen === 'detail') el = <MealDetailScreen meal={meals.find(m => m.id === sel)} onBack={() => setScreen('today')}
+      onDelete={m => { setMeals(ms => ms.filter(x => x.id !== m.id)); setScreen('today'); }} />;
+    else if (screen === 'settings') el = <SettingsScreen onBack={() => setScreen('today')} onImport={() => setScreen('import')} onSignOut={() => setScreen('signin')} />;
+    else el = <ImportScreen onBack={() => setScreen('today')} onDone={() => setScreen('today')} />;
+
+    const darkChrome = theme === 'dark' || (screen === 'capture' && mode !== 'manual');
+    return (
+      <div className="stage" data-theme={theme}>
+        <div className="stage__controls">
+          <SegmentedControl size="sm" fullWidth={false} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} value={theme} onChange={setTheme} />
+          <SegmentedControl size="sm" fullWidth={false} options={[{ value: 'online', label: 'Online' }, { value: 'offline', label: 'Offline' }]} value={net} onChange={setNet} />
+          <SegmentedControl size="sm" fullWidth={false} options={['Filled', 'Empty']} value={meals.length ? 'Filled' : 'Empty'} onChange={v => setMeals(v === 'Empty' ? [] : D.meals)} />
+          <Button size="sm" variant="ghost" icon="arrow-counter-clockwise" onClick={() => { setMeals(D.meals); setScreen('signin'); }}>Restart</Button>
+        </div>
+        <IOSDevice dark={darkChrome}>
+          <div className="scr-host" key={screen}>{el}</div>
+        </IOSDevice>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+})();
+</script>
+</body></html>

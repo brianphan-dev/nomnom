@@ -1,0 +1,78 @@
+<!-- @dsCard group="iPhone Duo" viewport="980x760" name="iPhone Duo" subtitle="Folded cover display and unfolded dual-pane layouts: Today, AI review, sign in" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>nomnom · iPhone Duo UI kit</title>
+<link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="../ios/kit.css"><link rel="stylesheet" href="duo.css">
+<style>
+.stage{min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:28px;padding:20px 20px 40px;background:color-mix(in oklch,var(--bg-app) 90%,var(--ink))}
+.stage__controls{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="../ios/data.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel" src="../ios/SignInScreen.jsx"></script>
+<script type="text/babel" src="../ios/TodayScreen.jsx"></script>
+<script type="text/babel" src="../ios/ReviewScreen.jsx"></script>
+<script type="text/babel" src="../ios/MealDetailScreen.jsx"></script>
+<script type="text/babel" src="DuoFrame.jsx"></script>
+<script type="text/babel">
+(function () {
+  const { SegmentedControl, NavBar, IconButton, Button, MealPhoto } = window.NomnomDesignSystem_ec1f66;
+  const D = window.NN_DATA;
+  const VIEWS = [
+    { value: 'folded', label: 'Folded · Today' },
+    { value: 'today', label: 'Unfolded · Today' },
+    { value: 'review', label: 'Unfolded · Review' },
+    { value: 'signin', label: 'Unfolded · Sign in' },
+  ];
+
+  function ReviewSplit({ onClose, onSave }) {
+    const r = useReview();
+    const left = (
+      <div className="scr">
+        <div className="scr__top"><NavBar title="Review" leading={<IconButton icon="x" label="Discard" variant="filled" size={36} onClick={onClose} />} trailing={<Button size="sm" variant="ghost">Retake</Button>} /></div>
+        <div className="scr__scroll">
+          <MealPhoto label="captured photo" radius={28} style={{ width: '100%', height: 150 }} />
+          <ReviewHeader r={r} />
+          <ReviewExtras r={r} />
+        </div>
+        <div className="scr__footer"><ReviewSave r={r} onSave={onSave} /></div>
+      </div>
+    );
+    const right = <div className="scr"><div className="scr__top" /><div className="scr__scroll"><ReviewItems r={r} /></div></div>;
+    return <DuoFrame unfolded left={left} right={right} />;
+  }
+
+  function App() {
+    const [theme, setTheme] = React.useState('light');
+    const [view, setView] = React.useState(() => localStorage.getItem('nn-duo-view') || 'today');
+    const [meals, setMeals] = React.useState(D.meals);
+    const [sel, setSel] = React.useState(null);
+    React.useEffect(() => { localStorage.setItem('nn-duo-view', view); }, [view]);
+    const save = m => { const id = 'n' + Date.now(); setMeals(ms => [{ id, time: '19:05', ...m }].concat(ms)); setSel(id); setView('today'); };
+    const meal = meals.find(m => m.id === sel);
+
+    let el;
+    if (view === 'folded') el = <DuoFrame><TodayScreen meals={meals} compactSummary compactDock onSnap={() => setView('review')} /></DuoFrame>;
+    else if (view === 'review') el = <ReviewSplit onClose={() => setView('today')} onSave={save} />;
+    else if (view === 'signin') el = <DuoFrame unfolded left={<SignInScreen split="left" />} right={<SignInScreen split="right" onSignIn={() => setView('today')} />} />;
+    else el = <DuoFrame unfolded
+      left={<TodayScreen meals={meals} compactSummary selectedId={sel} onMeal={m => setSel(m.id)} onSnap={() => setView('review')} />}
+      right={meal ? <MealDetailScreen key={meal.id} embedded meal={meal} onBack={() => setSel(null)} onDelete={m => { setMeals(ms => ms.filter(x => x.id !== m.id)); setSel(null); }} /> : <WeekTrend />} />;
+
+    return (
+      <div className="stage" data-theme={theme}>
+        <div className="stage__controls">
+          <SegmentedControl size="sm" fullWidth={false} options={VIEWS} value={view} onChange={setView} />
+          <SegmentedControl size="sm" fullWidth={false} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} value={theme} onChange={setTheme} />
+        </div>
+        {el}
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+})();
+</script>
+</body></html>

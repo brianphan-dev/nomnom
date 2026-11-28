@@ -1,0 +1,14 @@
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;font:var(--type-body);letter-spacing:var(--tracking-sans);color:var(--text-primary);background:var(--bg-app)}
+a{color:var(--accent-text);text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{color:var(--text-primary)}
+.nn-num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-num)}
+.nn-overline{font:var(--type-overline);letter-spacing:var(--tracking-overline);text-transform:uppercase;color:var(--text-tertiary)}
+.nn-display{font-family:var(--font-display);font-weight:400;letter-spacing:var(--tracking-display)}
+.nn-spin{animation:nn-spin 1s linear infinite}
+.nn-shimmer{background:linear-gradient(100deg,var(--fill-1) 30%,var(--fill-2) 50%,var(--fill-1) 70%);background-size:200% 100%;animation:nn-shimmer 1.4s linear infinite}
+@keyframes nn-spin{to{transform:rotate(360deg)}}
+@keyframes nn-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes nn-fade{from{opacity:0}to{opacity:1}}
+@keyframes nn-pop{from{opacity:0;transform:scale(0.94)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
