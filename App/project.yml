@@ -1,0 +1,62 @@
+name: nomnom
+options:
+  bundleIdPrefix: dev.brianphan
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: 8A98WM59LR
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  NomNomShared:
+    path: ../Packages/NomNomShared
+  NomNomDesignSystem:
+    path: ../Packages/NomNomDesignSystem
+  NomNomCore:
+    path: ../Packages/NomNomCore
+targets:
+  nomnom:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Sources
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.brianphan.nomnom
+        PRODUCT_NAME: nomnom
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: nomnom.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: false
+        ENABLE_USER_SCRIPT_SANDBOXING: true
+    dependencies:
+      - package: NomNomShared
+      - package: NomNomDesignSystem
+      - package: NomNomCore
+    scheme:
+      testTargets:
+        - nomnomTests
+  nomnomTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.brianphan.nomnom.tests
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: nomnom
+      - package: NomNomShared
+      - package: NomNomDesignSystem
+      - package: NomNomCore
