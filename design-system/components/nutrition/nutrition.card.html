@@ -1,0 +1,35 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Nutrition" subtitle="DailySummary, MealRow, FoodItemRow, MacroBar, MacroLine, MealPhoto" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Nutrition</title>
+<link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="../card.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+const { DailySummary, MealRow, FoodItemRow, Card } = window.NomnomDesignSystem_ec1f66;
+function App() {
+  const [open, setOpen] = React.useState('b');
+  const [m, setM] = React.useState({ a: 1, b: 0.75 });
+  const row = (id, p) => <FoodItemRow {...p} multiplier={m[id]} onMultiplier={v => setM({ ...m, [id]: v })} expanded={open === id} onToggle={() => setOpen(open === id ? null : id)} />;
+  return (
+    <div className="cols">
+      <DailySummary kcal={1118} target={2100} protein={{ value: 62, target: 120 }} carbs={{ value: 121, target: 240 }} fat={{ value: 41, target: 70 }} defaultExpanded
+        micros={[{ label: 'Fiber', value: '14 g' }, { label: 'Sugar', value: '31 g' }, { label: 'Sodium', value: '1,280 mg' }]} />
+      <div className="stack" style={{ gap: 12 }}>
+        <Card padding="none" style={{ padding: 8 }}>
+          <MealRow title="Salmon rice bowl" mealType="Lunch" time="12:40" kcal={612} protein={38} carbs={58} fat={24} method="photo_ai" />
+          <MealRow title="Dinner photo" mealType="Dinner" time="19:05" pending />
+        </Card>
+        <Card padding="none">
+          {row('a', { name: 'Jasmine rice', serving: '1 cup (~160g)', kcal: 205, confidence: 0.88 })}
+          {row('b', { name: 'Broccolini', serving: '1 cup (~90g)', kcal: 40, confidence: 0.71 })}
+        </Card>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body></html>

@@ -1,0 +1,80 @@
+<!-- @dsCard group="Components" viewport="700x470" name="Core" subtitle="Button, IconButton, Badge, Chip, Card, Icon" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Core</title>
+<link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="../card.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+const { Button, IconButton, Badge, Chip, Card, Icon } = window.NomnomDesignSystem_ec1f66;
+function App() {
+  const [chip, setChip] = React.useState('cup');
+  return (
+    <div className="stack">
+      <div>
+        <p className="lbl">Button</p>
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="row">
+            <Button>Primary</Button>
+            <Button variant="accent" icon="camera" iconWeight="fill">Snap plate</Button>
+            <Button variant="secondary">Secondary</Button>
+            <Button variant="ghost">Ghost</Button>
+            <Button variant="destructive">Delete account</Button>
+          </div>
+          <div className="row">
+            <Button size="lg" variant="accent">Save <span className="nn-num">612</span> kcal to diary</Button>
+            <Button size="sm" variant="secondary" icon="plus">Add missing item</Button>
+            <Button loading>Saving</Button>
+            <Button disabled>Disabled</Button>
+          </div>
+        </div>
+      </div>
+      <div className="cols">
+        <div>
+          <p className="lbl">IconButton</p>
+          <div className="row">
+            <IconButton icon="gear-six" label="Settings" />
+            <IconButton icon="calendar-blank" label="Pick date" variant="filled" />
+            <IconButton icon="plus" label="Add" variant="ink" weight="bold" />
+            <IconButton icon="camera" label="Snap" variant="accent" weight="fill" size={56} />
+            <span className="dark-tile"><IconButton icon="x" label="Close" variant="glass" /><IconButton icon="images" label="Library" variant="glass" /></span>
+          </div>
+        </div>
+        <div>
+          <p className="lbl">Chip</p>
+          <div className="row">
+            <Chip selected={chip === 'cup'} onClick={() => setChip('cup')}>1 cup <i>170g</i></Chip>
+            <Chip selected={chip === '100'} onClick={() => setChip('100')}>100g</Chip>
+            <Chip selected={chip === 'tub'} onClick={() => setChip('tub')}>1 tub <i>500g</i></Chip>
+            <Chip size="sm" icon="microphone">Add a hint</Chip>
+          </div>
+        </div>
+      </div>
+      <div className="cols">
+        <div>
+          <p className="lbl">Badge</p>
+          <div className="row">
+            <Badge method="photo_ai" /><Badge method="barcode" /><Badge method="manual" /><Badge method="imported" />
+            <Badge tone="check" icon="question">Check</Badge>
+            <Badge tone="pending" icon="clock">Pending AI analysis</Badge>
+            <Badge tone="accent">3 scans left</Badge><Badge tone="positive" icon="check">Imported</Badge><Badge tone="info">USDA</Badge>
+          </div>
+        </div>
+        <div>
+          <p className="lbl">Card</p>
+          <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'stretch' }}>
+            <Card padding="md" style={{ flex: 1, font: 'var(--type-footnote)' }}>surface</Card>
+            <Card padding="md" tone="sunken" style={{ flex: 1, font: 'var(--type-footnote)' }}>sunken</Card>
+            <Card padding="md" tone="outline" style={{ flex: 1, font: 'var(--type-footnote)' }}>outline</Card>
+            <Card padding="md" tone="accent" style={{ flex: 1, font: 'var(--type-footnote)' }}>accent</Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body></html>

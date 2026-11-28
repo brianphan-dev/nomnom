@@ -1,0 +1,13 @@
+<!-- @dsCard group="Motion" viewport="700x150" name="Motion" subtitle="Short and quiet. Hover a tile to preview. No bounces, no confetti." -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Motion</title>
+<link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="card.css">
+<style>.tile{min-height:88px;cursor:pointer}.m1{transition:transform var(--dur-fast) var(--ease-standard)}.m1:hover{transform:scale(var(--press-scale))}
+.m2 i{position:absolute;left:0;right:0;bottom:0;height:100%;background:var(--accent-soft);border-radius:20px 20px 0 0;transform:translateY(100%);transition:transform var(--dur-sheet) var(--ease-out)}.m2:hover i{transform:translateY(30%)}
+.m3 span{display:block;height:100%;width:35%;border-radius:9px;background:var(--accent);transition:width var(--dur-sheet) var(--ease-out)}.m3:hover span{width:80%}</style>
+</head><body>
+<div class="grid" style="grid-template-columns:repeat(3,1fr)">
+<div class="tile m1" style="background:var(--fill-1);box-shadow:none"><b>Press</b><code>scale 0.97 · --dur-fast 120ms</code></div>
+<div class="tile m2" style="background:var(--fill-1);box-shadow:none;position:relative;overflow:hidden"><i></i><b style="position:relative">Sheet</b><code style="position:relative">--ease-out · --dur-sheet 420ms</code></div>
+<div class="tile m3" style="background:var(--fill-1);box-shadow:none"><b>Totals</b><div style="height:6px;border-radius:9px;background:var(--fill-2);overflow:hidden;margin:4px 0"><span></span></div><code>width · --ease-out 420ms</code></div></div>
+</body></html>
